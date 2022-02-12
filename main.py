@@ -24,7 +24,7 @@ screen_height = 900
 
 # "screen" is the name of the variable which will be used to refer to the game's output.
 screen = pygame.display.set_mode((screen_width, screen_height))
-pygame.display.set_caption("Python PLatformer Game")
+pygame.display.set_caption("Python Platformer Game")
 
 tile_size = 50
 game_over = 0
