@@ -1,22 +1,25 @@
 import pygame
 from pygame.locals import *
-from pygame import mixer  # pygame.mixer() is used for music.
+from pygame import mixer, image  # pygame.mixer() is used for music.
 import pickle
 from os import path
-
 from pathlib import Path  # To make the paths work on any platform, by extracting the path as a path, instead of a string.
+
 images_folder = Path("images")
 sounds_folder = Path("sounds")
 levels_folder = Path("levels") 
 sprites_folder = Path("sprites")
 fonts_folder = Path("fonts")
 
-pygame.mixer.pre_init(44100, -16, 2, 512)  # (frequency, size, channel, buffer)
+
+pygame.mixer.pre_init(44100, -16, 10, 256)  # (frequency, size, channel, buffer)
 mixer.init()
 pygame.init()
 
+pygame.mixer.set_num_channels(10)
+
 clock = pygame.time.Clock()
-fps = 90
+fps = 60
 
 # Setting the height and width of the game screen (in units of pixels).
 screen_width = 1500
@@ -29,14 +32,19 @@ pygame.display.set_caption("Python Platformer Game")
 tile_size = 50
 game_over = 0
 main_menu = True
-level = 1
-max_levels = 1
+level = 2
+max_levels = 2
 score = 0
 
 # Accessing an image file from the system to be used as the background, and resizing it to fit the screen
 # background_image_1 = pygame.image.load(images_folder / r"Background 1.png")
-background_image_1 = pygame.image.load(images_folder / r"Background 1.png") 
-scaled_background_image_1 = pygame.transform.smoothscale(background_image_1, (1500, 900))
+'''background_image_1 = pygame.image.load(images_folder / r"Background 1.png")
+scaled_background_image_1 = pygame.transform.smoothscale(background_image_1, (1500, 900))'''
+
+background_image_list = []
+for i in range(1,4):
+    background_image_temp = f"Background {i}(jpg).jpg"
+    background_image_list.append(background_image_temp)
 
 menu_image = pygame.image.load(images_folder / r"menu.jpg")
 scaled_menu_image = pygame.transform.scale(menu_image, (1500, 900))
@@ -44,7 +52,7 @@ scaled_menu_image = pygame.transform.scale(menu_image, (1500, 900))
 restart_button_image = pygame.image.load(images_folder / r"restart button.png")
 scaled_restart_button_image = pygame.transform.scale(restart_button_image, (300, 150))
 start_button_image = pygame.image.load(images_folder / r"start button.png")
-scaled_start_button_image = pygame.transform.scale(start_button_image, (320, 150))
+scaled_start_button_image = pygame.transform.scale(start_button_image, (350, 150))
 
 exit_button_image = pygame.image.load(images_folder / r"exit button.png")
 scaled_exit_button_image = pygame.transform.scale(exit_button_image, (350, 150))
@@ -54,16 +62,19 @@ scaled_logo_image = pygame.transform.scale(logo_image, (1000, 600))
  
 # Sounds
 pygame.mixer.music.load(sounds_folder / r"background music.wav")
-pygame.mixer.music.play(-1, 0.0, 7000)  # (no of loops, start time, fade in ms) 
-# TODO: Run sounds
+pygame.mixer.music.set_volume(0.15)
+pygame.mixer.music.play(loops = -1, start = 0.0, fade_ms = 5000)
+
+run_fx = pygame.mixer.Sound(sounds_folder / r"run sound.wav")
+run_fx.set_volume(0.2)
 coin_fx = pygame.mixer.Sound(sounds_folder / r"coin sound.wav")
-coin_fx.set_volume(0.8)  # Changes the volume of the sound 
+coin_fx.set_volume(0.7)  # Changes the volume of the sound 
 jump_fx = pygame.mixer.Sound(sounds_folder / r"jump sound.wav")
-jump_fx.set_volume(1.1)
+jump_fx.set_volume(1.5)
 game_over_fx = pygame.mixer.Sound(sounds_folder / r"retro game over.wav")
 game_over_fx.set_volume(0.3)
- 
- 
+
+
 def draw_text(text, font, text_colour, x, y):  # Function to draw text onto screen to display score, etc.
     img = font.render(text, True, text_colour)
     screen.blit(img, (x, y))
@@ -73,6 +84,9 @@ def reset_level(level):  # Function to reset level
     player.reset(100, screen_height - 130)
     
     ice_snake_group.empty() 
+    ice_spirit_group.empty()
+    fire_monster_group.empty()
+    fire_spirit_group.empty()
     lava_group.empty()
     exit_group.empty()
     platform_group.empty()
@@ -134,7 +148,8 @@ class Player():
                 # To prevent the player from being able to jump while already in the air
                 self.y_velocity = -15  # Velocity obtained on jumping
                 self.did_jump = True
-                jump_fx.play()  
+                run_fx.stop()
+                jump_fx.play()
                 # To prevent being able to hold the spacebar indefinitely and keep on going upwards
             
             if key[pygame.K_SPACE] and self.did_jump == False and self.in_air == True and self.against_wall == True and \
@@ -142,21 +157,23 @@ class Player():
                 self.y_velocity = -15
                 self.did_jump = True
                 self.did_wall_jump = True
+                run_fx.stop()
                 jump_fx.play()
                 
             if key[pygame.K_SPACE] == False:
                 self.did_jump = False 
     
             if key[pygame.K_LEFT]:
-                Dx -= 7.5
+                Dx -= 6
                 self.counter += 1
                 self.direction = -1
                 
             if key[pygame.K_RIGHT]:
-                Dx += 7.5
+                Dx += 6
                 self.counter += 1 
                 self.direction = 1
-                
+                        
+         
             if key[pygame.K_LEFT] == False and key[pygame.K_RIGHT] == False:
                 self.counter = 0
                 self.index = 0
@@ -181,10 +198,11 @@ class Player():
                 if self.direction == -1:
                     self.image = self.walking_towards_left_image_list[self.index] 
                 
+      
             # Add gravity
             self.y_velocity += 1
-            if self.y_velocity >= 20:  # Terminal velocity
-                self.y_velocity = 20   
+            if self.y_velocity >= 12:  # Terminal velocity
+                self.y_velocity = 12   
             Dy += self.y_velocity    
             
             # Check for collision
@@ -211,13 +229,15 @@ class Player():
                         self.did_wall_jump = False
                         
                 # Check for collision with enemies
-                if pygame.sprite.spritecollide(self, ice_snake_group, False):
+                if pygame.sprite.spritecollide(self, ice_snake_group or ice_spirit_group or fire_monster_group or fire_spirit_group, False):
                     game_over = -1  # if game_over == -1, the player dies
+                    run_fx.stop()
                     game_over_fx.play()
                 
                 # Check for collision with lava
                 if pygame.sprite.spritecollide(self, lava_group, False):
                     game_over = -1  
+                    run_fx.stop()
                     game_over_fx.play()
                     
                 # Check for collision with exit (the exit is a transparent block)         
@@ -241,9 +261,10 @@ class Player():
                         # Make the player's head's y coordinate equal the y coordinate of the bottom of the platform.   
                         # platform.rect.bottom - self.rect.top > 0, but since the Dy term may make it negative, we apply the abs().
                         
-                        elif abs((self.rect.bottom + Dy) - platform.rect.top) < collision_threshold:
+                        if abs((self.rect.bottom + Dy) - platform.rect.top) < collision_threshold:
                             # self.rect.bottom - platform.rect.top > 0, but the Dy term may make it negative. (Dy may be negative.)
-                            self.rect.bottom = platform.rect.top - 1 
+                            self.rect.bottom = platform.rect.top - 1
+                            
                             
                             ''' We subtract 1 from the self.rect.bottom (the y axis is inverted in python) so that the x direction collision
                              code does not think that the think that the player is constantly colliding with the platform and thus set Dx to zero.
@@ -252,6 +273,8 @@ class Player():
                             
                             Dy = 0
                             self.in_air = False
+                            self.did_jump = False
+                            self.did_wall_jump = False
                             
                             ''' The bottom of the player's sprite is equated to the y coordinate of the top of the platform so that 
                             the player stays on the platform even if it moves up or down.'''
@@ -260,14 +283,32 @@ class Player():
                             if platform.move_x != 0:
                                 self.rect.x += platform.move_direction
                 
+                       
+                if Dx != 0 and Dy == 0:
+                    run_fx.play()
+                if Dx == 0:
+                    run_fx.stop()
+                
+                                
             # Update player coordinates
             self.rect.x += Dx
             self.rect.y += Dy
             
+            
+            
         elif game_over == -1:
-            self.image = self.dead_image
             draw_text("GAME OVER", pygame.font.Font(fonts_folder / r"super-legend-boy-font\SuperLegendBoy-4w8Y.ttf", 60), \
              (0, 0, 0), screen_width // 2 - 220, screen_height // 2 - 100)
+            '''dead_images_list_right = []
+            dead_images_list_left = []
+            for i in range(7):
+                dead_image_right = pygame.image.load(sprites_folder / fr"adventurer-die-{i}")
+                dead_image_right = pygame.transform.scale(dead_image_right, (48,64))
+                dead_image_left = pygame.transform.flip(dead_image_right, True, False)
+                dead_images_list_right.append(dead_image_right)
+                dead_images_list_left.append(dead_image_left)'''
+                
+            self.image = self.dead_image
             self.rect.y -= 5
             
         # Drawing the player onto the screen
@@ -326,7 +367,7 @@ class World():
                     self.tile_list.append(tile)
                
                 if tile == 2:
-                    ice_snake = Enemy(column_counter * tile_size, row_counter * tile_size + 10)
+                    ice_snake = Enemy(column_counter * tile_size, row_counter * tile_size + 10, 1)
                     ice_snake_group.add(ice_snake)
                     
                 if tile == 3:
@@ -349,6 +390,18 @@ class World():
                     platform = Platform(column_counter * tile_size, row_counter * tile_size, 0, 1)
                     platform_group.add(platform)
                     
+                if tile == 8:
+                    ice_spirit = Enemy(column_counter * tile_size, row_counter * tile_size + 10, 2)
+                    ice_spirit_group.add(ice_spirit)
+                    
+                if tile == 9:
+                    fire_monster = Enemy(column_counter * tile_size, row_counter * tile_size + 10, 3)
+                    fire_monster_group.add(fire_monster)
+                    
+                if tile == 10:
+                    fire_spirit = Enemy(column_counter * tile_size, row_counter * tile_size + 10, 4)
+                    fire_spirit_group.add(fire_spirit)
+                    
                 column_counter += 1
             row_counter += 1        
 
@@ -360,27 +413,35 @@ class World():
 
 class Enemy(pygame.sprite.Sprite):
 
-    def __init__(self, x, y):
+    def __init__(self, x, y, enemy_number):
         pygame.sprite.Sprite.__init__(self)
-        global ice_snake_image
-        ice_snake_image = pygame.image.load(sprites_folder / r"Ice_Snake.png")
-        self.image = pygame.transform.scale(ice_snake_image, (40, 40))
+        global ice_snake_image, ice_spirit_image, fire_monster_image, fire_spirit_image             
+        ice_snake_image = pygame.transform.scale(pygame.image.load(sprites_folder / r"Ice_Snake.png"), (40,40))
+        ice_spirit_image = pygame.transform.scale(pygame.image.load(sprites_folder / r"Ice_Spirit.png"), (50,50))
+        fire_monster_image = pygame.transform.scale(pygame.image.load(sprites_folder / r"Fire_Monster.png"), (80,40))
+        fire_spirit_image = pygame.transform.scale(pygame.image.load(sprites_folder / r"Fire_Spirit.png"), (40,50))
+        global enemy_list
+        enemy_list = []  
+        enemy_list.extend([ice_snake_image, ice_spirit_image, fire_monster_image, fire_spirit_image])
+        
+        self.image = enemy_list[enemy_number - 1]
+        #self.image = pygame.transform.scale(ice_snake_image, (40, 40))
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
         self.move_direction = -2
         self.move_counter = 0
         
-    def update(self): 
+    def update(self, enemy_number): 
         self.rect.x += self.move_direction
         self.move_counter += 1
         if abs(self.move_counter) > 50:
             self.move_direction *= -1
             self.move_counter *= -1
-        if self.move_direction >= 0:
-            self.image = pygame.transform.flip(pygame.transform.scale(ice_snake_image, (40, 40)), True, False)
+        if self.move_direction >= 0: # Since the original sprites face towards the left, but the positive direction is right.
+            self.image = pygame.transform.flip(enemy_list[enemy_number -1], True, False)
         elif self.move_direction <= 0:
-            self.image = self.image = pygame.transform.scale(ice_snake_image, (40, 40))
+            self.image = enemy_list[enemy_number -1]
 
 
 class Lava(pygame.sprite.Sprite):
@@ -392,7 +453,7 @@ class Lava(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
-
+        
         
 class Coin(pygame.sprite.Sprite):
 
@@ -468,6 +529,9 @@ lava_group = pygame.sprite.Group()
 coin_group = pygame.sprite.Group()
 exit_group = pygame.sprite.Group()
 platform_group = pygame.sprite.Group()
+ice_spirit_group = pygame.sprite.Group()
+fire_monster_group = pygame.sprite.Group()
+fire_spirit_group = pygame.sprite.Group()
 
 # Loading in level data and creating world
 if path.exists(levels_folder / fr"level{level}_data") == True:
@@ -479,7 +543,7 @@ world = World(world_data)
 # Creating buttons
 restart_button = Button(screen_width // 2 - 125, screen_height // 2 - 50, scaled_restart_button_image)
 start_button = Button(screen_width // 2 - 150, screen_height // 2 , scaled_start_button_image)
-exit_button = Button(screen_width // 2 - 180, screen_height // 2 + 200, scaled_exit_button_image)
+exit_button = Button(screen_width // 2 - 150, screen_height // 2 + 200, scaled_exit_button_image)
 logo = Button(screen_width // 2 - 500, screen_height // 2 - 600, scaled_logo_image)
 
 run = True
@@ -488,7 +552,7 @@ while run == True:
     clock.tick(fps)  # Set frame rate
     
     if main_menu == False:
-        screen.blit(scaled_background_image_1, (0, 0))
+        screen.blit(pygame.transform.scale(pygame.image.load(images_folder / background_image_list[level-1]), (1500,900)), (0, 0))
     else:
         screen.blit(scaled_menu_image, (0, 0))
     
@@ -504,10 +568,14 @@ while run == True:
         world.draw ()
         
         if game_over == 0:
-            ice_snake_group.update() 
+            ice_snake_group.update(1) 
+            ice_spirit_group.update(2)
+            fire_monster_group.update(3)
+            fire_spirit_group.update(4)
             platform_group.update()
             # Update score, check if a coin has been collected.
             if pygame.sprite.spritecollide(player, coin_group, True):
+                run_fx.stop()
                 coin_fx.play()
                 score += 100 
             # "True" in the spritecollide argument causes the coins to disappear when touched
@@ -520,10 +588,14 @@ while run == True:
         coin_group.draw(screen)
         exit_group.draw(screen)
         platform_group.draw(screen)
+        ice_spirit_group.draw(screen)
+        fire_monster_group.draw(screen)
+        fire_spirit_group.draw(screen)
         
         game_over = player.update(game_over)
         
         if game_over == -1:
+            
             if restart_button.draw() == True:
                 world_data = [] 
                 world = reset_level(level)  # Restart the level
